@@ -1,54 +1,60 @@
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
-import os
-from datetime import datetime
-import tempfile
+import io
+import datetime
 
-# Function to overlay timestamp
-def add_timestamp(img, text, font_size=40):
-    draw = ImageDraw.Draw(img)
+st.set_page_config(page_title="Image Timestamp App", layout="centered")
 
-    # Try to use Arial, fallback if not available
+st.title("📸 Timestamp Your Images")
+st.markdown("Upload up to **500+ photos** and apply a timestamp!")
+
+# Upload images
+uploaded_files = st.file_uploader(
+    "Upload your photos", 
+    type=["png", "jpg", "jpeg"], 
+    accept_multiple_files=True
+)
+
+timestamp = st.text_input("Enter the timestamp (leave blank for current time):")
+
+font_size = st.slider("Font size", min_value=10, max_value=100, value=31)
+
+def add_timestamp(image, timestamp_text, font_size):
+    draw = ImageDraw.Draw(image)
+    
+    # Try to load Arial font
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
     except:
-        font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+        font = ImageFont.load_default()
 
-    text_width, text_height = draw.textsize(text, font=font)
-    x = img.width - text_width - 20
-    y = img.height - text_height - 20
+    # Get text bounding box for accurate placement
+    bbox = font.getbbox(timestamp_text)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
 
-    draw.text((x, y), text, font=font, fill="white")
-    return img
+    # Set position bottom right with padding
+    position = (image.width - text_width - 20, image.height - text_height - 20)
+    
+    # Draw white text with black shadow
+    draw.text((position[0]+2, position[1]+2), timestamp_text, font=font, fill="black")
+    draw.text(position, timestamp_text, font=font, fill="white")
 
-# Streamlit UI
-st.title("🕒 Time to Photo")
-st.markdown("Upload up to 500+ photos and apply a timestamp!")
+    return image
 
-uploaded_files = st.file_uploader("Upload your photos", accept_multiple_files=True, type=["png", "jpg", "jpeg"])
-
-timestamp_text = st.text_input("Enter the timestamp (leave blank for current time):")
-font_size = st.slider("Font size", min_value=10, max_value=100, value=40)
-
-# Show preview
 if uploaded_files:
-    preview_file = uploaded_files[0]  # Show only the first image
-    st.markdown("### Preview (First Image Only):")
+    # Use current time if none is provided
+    if not timestamp:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    image = Image.open(preview_file).convert("RGB")
-    timestamp = timestamp_text if timestamp_text else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    preview_img = add_timestamp(image.copy(), timestamp, font_size)
-    st.image(preview_img, caption="Preview")
+    st.subheader("🔍 Preview (First Image Only):")
 
-    if st.button("Process All Images"):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            for i, uploaded_file in enumerate(uploaded_files):
-                img = Image.open(uploaded_file).convert("RGB")
-                timestamp = timestamp_text if timestamp_text else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                img_with_text = add_timestamp(img, timestamp, font_size)
+    try:
+        # Show preview of first image only
+        preview_file = uploaded_files[0]
+        img = Image.open(preview_file)
+        preview_img = add_timestamp(img.copy(), timestamp, font_size)
 
-                save_path = os.path.join(tmpdirname, f"timestamped_{i+1}.jpg")
-                img_with_text.save(save_path)
-
-            st.success(f"Processed {len(uploaded_files)} images with timestamps.")
-
+        st.image(preview_img, caption="Preview with Timestamp", use_column_width=True)
+    except Exception as e:
+        st.error(f"Error processing preview image: {e}")
